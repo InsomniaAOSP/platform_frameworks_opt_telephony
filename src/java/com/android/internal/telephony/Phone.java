@@ -103,6 +103,7 @@ public interface Phone {
     static final String REASON_DATA_DEPENDENCY_UNMET = "dependencyUnmet";
     static final String REASON_LOST_DATA_CONNECTION = "lostDataConnection";
     static final String REASON_CONNECTED = "connected";
+    static final String REASON_NV_READY = "nvReady";
 
     // Used for band mode selection methods
     static final int BM_UNSPECIFIED = 0; // selected by baseband automatically
@@ -1666,6 +1667,12 @@ public interface Phone {
      * or {@link PhoneConstants#LTE_ON_CDMA_TRUE}
      */
     public int getLteOnCdmaMode();
+
+    /**
+     * Return if the current radio is LTE on GSM
+     * @hide
+     */
+    public int getLteOnGsmMode();
 
     /**
      * TODO: Adding a function for each property is not good.

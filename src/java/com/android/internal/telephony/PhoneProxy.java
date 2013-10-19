@@ -140,13 +140,24 @@ public class PhoneProxy extends Handler implements Phone {
     private void updatePhoneObject(int newVoiceRadioTech) {
 
         if (mActivePhone != null) {
-            if(mRilVersion == 6 && getLteOnCdmaMode() == PhoneConstants.LTE_ON_CDMA_TRUE) {
+            if(mRilVersion >= 6 && getLteOnCdmaMode() == PhoneConstants.LTE_ON_CDMA_TRUE) {
                 /*
-                 * On v6 RIL, when LTE_ON_CDMA is TRUE, always create CDMALTEPhone
-                 * irrespective of the voice radio tech reported.
+                 * On v6 or greater RIL, when LTE_ON_CDMA is TRUE, always create CDMALTEPhone
+                 * irrespective of the voice radio tech reported. Handle instance
+                 * where device may be global phone, reporting as cdma device. Don't update
+                 * voice tech in that scenario.
                  */
-                if (mActivePhone.getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA) {
+                if ((ServiceState.isCdma(newVoiceRadioTech) &&
+                        mActivePhone.getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA)) {
                     logd("LTE ON CDMA property is set. Use CDMA Phone" +
+                            " newVoiceRadioTech = " + newVoiceRadioTech +
+                            " Active Phone = " + mActivePhone.getPhoneName());
+                    // IccCardProxy needs to be kept in sync
+                    mIccCardProxy.setVoiceRadioTech(newVoiceRadioTech);
+                    return;
+                } else if ((ServiceState.isGsm(newVoiceRadioTech) &&
+                        mActivePhone.getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA)) {
+                    logd("LTE ON CDMA property is set. Already CDMA Phone" +
                             " newVoiceRadioTech = " + newVoiceRadioTech +
                             " Active Phone = " + mActivePhone.getPhoneName());
                     return;
@@ -165,6 +176,8 @@ public class PhoneProxy extends Handler implements Phone {
                     logd("Ignoring voice radio technology changed message." +
                             " newVoiceRadioTech = " + newVoiceRadioTech +
                             " Active Phone = " + mActivePhone.getPhoneName());
+                    // IccCardProxy needs to be kept in sync
+                    mIccCardProxy.setVoiceRadioTech(newVoiceRadioTech);
                     return;
                 }
             }
@@ -175,6 +188,8 @@ public class PhoneProxy extends Handler implements Phone {
             // delete the phone without anything to replace it with!
             logd("Ignoring voice radio technology changed message. newVoiceRadioTech = Unknown."
                     + " Active Phone = " + mActivePhone.getPhoneName());
+            // IccCardProxy, though, needs to know even if radio tech is unknown
+            mIccCardProxy.setVoiceRadioTech(newVoiceRadioTech);
             return;
         }
 
@@ -1144,6 +1159,14 @@ public class PhoneProxy extends Handler implements Phone {
     @Override
     public int getLteOnCdmaMode() {
         return mActivePhone.getLteOnCdmaMode();
+    }
+
+    /**
+     * {@hide}
+     */
+    @Override
+    public int getLteOnGsmMode() {
+        return mActivePhone.getLteOnGsmMode();
     }
 
     @Override

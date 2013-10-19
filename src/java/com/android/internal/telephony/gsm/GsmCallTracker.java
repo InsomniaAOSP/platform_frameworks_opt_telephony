@@ -81,6 +81,9 @@ public final class GsmCallTracker extends CallTracker {
     GsmConnection pendingMO;
     boolean mHangupPendingMO;
 
+    //Used to re-request the list of current calls
+    boolean mSlowModem = (SystemProperties.getInt("ro.telephony.slowModem",0) != 0);
+
     GSMPhone mPhone;
 
     boolean mDesiredMute = false;    // false = mute off
@@ -435,8 +438,17 @@ public final class GsmCallTracker extends CallTracker {
         Connection newRinging = null; //or waiting
         boolean hasNonHangupStateChanged = false;   // Any change besides
                                                     // a dropped connection
+        boolean hasAnyCallDisconnected = false;
         boolean needsPollDelay = false;
         boolean unknownConnectionAppeared = false;
+
+        if (mSlowModem) {
+            if (polledCalls.size() == 0 && !mHangupPendingMO && pendingMO != null) {
+                mLastRelevantPoll = obtainMessage(EVENT_POLL_CALLS_RESULT);
+                mCi.getCurrentCalls(mLastRelevantPoll);
+                return;
+            }
+        }
 
         for (int i = 0, curDC = 0, dcSize = polledCalls.size()
                 ; i < mConnections.length; i++) {
@@ -594,15 +606,11 @@ public final class GsmCallTracker extends CallTracker {
                     log("setting cause to " + cause);
                 }
                 mDroppedDuringPoll.remove(i);
-                conn.onDisconnect(cause);
-            } else if (conn.mCause == Connection.DisconnectCause.LOCAL) {
-                // Local hangup
+                hasAnyCallDisconnected |= conn.onDisconnect(cause);
+            } else if (conn.mCause == Connection.DisconnectCause.LOCAL
+                    || conn.mCause == Connection.DisconnectCause.INVALID_NUMBER) {
                 mDroppedDuringPoll.remove(i);
-                conn.onDisconnect(Connection.DisconnectCause.LOCAL);
-            } else if (conn.mCause ==
-                Connection.DisconnectCause.INVALID_NUMBER) {
-                mDroppedDuringPoll.remove(i);
-                conn.onDisconnect(Connection.DisconnectCause.INVALID_NUMBER);
+                hasAnyCallDisconnected |= conn.onDisconnect(conn.mCause);
             }
         }
 
@@ -621,7 +629,7 @@ public final class GsmCallTracker extends CallTracker {
         // 1) the phone has started to ring
         // 2) A Call/Connection object has changed state...
         //    we may have switched or held or answered (but not hung up)
-        if (newRinging != null || hasNonHangupStateChanged) {
+        if (newRinging != null || hasNonHangupStateChanged || hasAnyCallDisconnected) {
             internalClearDisconnected();
         }
 
@@ -631,7 +639,7 @@ public final class GsmCallTracker extends CallTracker {
             mPhone.notifyUnknownConnection();
         }
 
-        if (hasNonHangupStateChanged || newRinging != null) {
+        if (hasNonHangupStateChanged || newRinging != null || hasAnyCallDisconnected) {
             mPhone.notifyPreciseCallStateChanged();
         }
 
@@ -769,6 +777,7 @@ public final class GsmCallTracker extends CallTracker {
                     "does not belong to GsmCallTracker " + this);
         }
 
+        mHangupPendingMO = true;
         call.onHangupLocal();
         mPhone.notifyPreciseCallStateChanged();
     }
